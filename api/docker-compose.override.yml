@@ -1,0 +1,59 @@
+# Docker Compose override for Media Pipeline API
+# 
+# Add this service to your existing /opt/media-pipeline/docker-compose.yml
+# or merge the service definition below into your existing services section.
+#
+# Usage:
+# 1. Copy the media-api service definition below into your docker-compose.yml
+# 2. Ensure the ./api directory exists at /opt/media-pipeline/api
+# 3. Run: docker-compose up --build media-api
+
+services:
+  media-api:
+    build: ./api
+    container_name: media-api
+    network_mode: host                 # Simplest for localhost binding to 127.0.0.1:8081
+    environment:
+      PORT: 8081
+      PIPELINE_CONTAINER: media-pipeline
+      GLUETUN_CONTAINER: gluetun
+      TOR_CONTAINER: torproxy
+      LINKS_FILE: /opt/media-pipeline/data/links.txt
+      NODE_ENV: production
+      # API_TOKEN: "your-secret-token-here"    # Uncomment to enable authentication
+      # APP_VERSION: "1.0.0"                   # Optional version info
+    volumes:
+      # Docker socket access for container control
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Data directory for links.txt and other files
+      - /opt/media-pipeline/data:/opt/media-pipeline/data:rw
+    restart: unless-stopped
+    depends_on:
+      - gluetun
+      - torproxy
+      # - media-pipeline  # Don't depend on this since we control it
+    healthcheck:
+      test: ["CMD", "node", "-e", "const http = require('http'); const req = http.request({hostname: '127.0.0.1', port: 8081, path: '/healthz', timeout: 2000}, (res) => process.exit(res.statusCode === 200 ? 0 : 1)); req.on('error', () => process.exit(1)); req.end();"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+# Alternative configuration if you prefer explicit port binding instead of host networking:
+#
+# services:
+#   media-api:
+#     build: ./api
+#     container_name: media-api
+#     ports:
+#       - "127.0.0.1:8081:8081"        # Bind only to localhost
+#     environment:
+#       # ... same as above
+#     volumes:
+#       # ... same as above
+#     networks:
+#       - media-pipeline-network       # Ensure it can reach other containers
+#
+# networks:
+#   media-pipeline-network:
+#     driver: bridge
